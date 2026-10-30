@@ -7,19 +7,41 @@ import {
   Database,
   Calendar,
   Clock,
-  BarChart2
+  BarChart2,
+  Loader2,
+  WifiOff,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const KPICardsRow: React.FC = () => {
   const {
-    selectedLocation,
     expectedCollection,
     currentStorage,
     tankCapacity,
     tankPercentage,
-    waterAvailableDays
+    waterAvailableDays,
+    weatherStatus,
+    weatherIsStale,
+    liveRainfallToday,
+    liveTotal7DayRainfall,
+    roofArea,
+    runoffCoefficient,
   } = useApp();
+
+  const isLoading = weatherStatus === 'loading' || weatherStatus === 'idle';
+  const showLive   = weatherStatus === 'success' || weatherIsStale;
+
+  // Rainfall intensity label
+  function rainfallLabel(mm: number): string {
+    if (mm === 0)   return 'No rainfall expected';
+    if (mm < 20)    return 'Light rainfall expected';
+    if (mm < 60)    return 'Moderate rainfall expected';
+    if (mm < 120)   return 'Heavy rainfall expected';
+    return 'Very heavy rainfall expected';
+  }
+
+  // Collection label for KPI card
+  const collectionNote = `${roofArea} m² × ${runoffCoefficient} coefficient`;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 px-4 sm:px-8">
@@ -31,15 +53,23 @@ export const KPICardsRow: React.FC = () => {
           </div>
           <div>
             <div className="text-xs font-semibold text-slate-500">Rainfall Today</div>
-            <div className="text-xl font-extrabold text-slate-900 mt-0.5">
-              {selectedLocation.rainfallToday} mm
-            </div>
+            {isLoading ? (
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                <span className="text-sm text-slate-400">Loading…</span>
+              </div>
+            ) : (
+              <div className="text-xl font-extrabold text-slate-900 mt-0.5">
+                {liveRainfallToday} mm
+              </div>
+            )}
           </div>
         </div>
-        <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
-          <TrendingUp className="w-3.5 h-3.5" />
-          <span>+{selectedLocation.trendPercent}%</span>
-          <span className="text-slate-400 font-normal ml-0.5">Compared to yesterday</span>
+        <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+          {weatherIsStale && <WifiOff className="w-3 h-3 text-amber-500" />}
+          <span className={weatherIsStale ? 'text-amber-600' : 'text-slate-500'}>
+            {showLive ? 'Daily accumulated rainfall' : 'Fetching live data…'}
+          </span>
         </div>
       </div>
 
@@ -57,11 +87,18 @@ export const KPICardsRow: React.FC = () => {
           </div>
           <BarChart2 className="w-5 h-5 text-blue-500" />
         </div>
-        <div className="text-xl font-extrabold text-slate-900 mt-2">
-          {selectedLocation.predicted7Days} mm
-        </div>
+        {isLoading ? (
+          <div className="flex items-center gap-1.5 mt-2">
+            <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+            <span className="text-sm text-slate-400">Loading…</span>
+          </div>
+        ) : (
+          <div className="text-xl font-extrabold text-slate-900 mt-2">
+            {liveTotal7DayRainfall} mm
+          </div>
+        )}
         <div className="mt-1 text-xs text-slate-500 font-medium">
-          Moderate rainfall expected
+          {showLive ? rainfallLabel(liveTotal7DayRainfall) : 'Fetching forecast…'}
         </div>
       </div>
 
@@ -84,7 +121,7 @@ export const KPICardsRow: React.FC = () => {
           </div>
         </div>
         <div className="mt-3 text-xs text-slate-400 font-medium">
-          Based on your roof area
+          {collectionNote}
         </div>
       </div>
 
@@ -95,13 +132,13 @@ export const KPICardsRow: React.FC = () => {
             <Database className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xs font-semibold text-slate-500">Estimated Tank Level</div>
+            <div className="text-xs font-semibold text-slate-500">Est. Tank Level</div>
             <div className="text-base font-extrabold text-slate-900 mt-0.5">
               {currentStorage.toLocaleString()} / {tankCapacity.toLocaleString()} L
             </div>
           </div>
         </div>
-        {/* Progress Bar matching reference image */}
+        {/* Progress Bar */}
         <div className="mt-3 flex items-center gap-2">
           <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200">
             <div
@@ -110,6 +147,9 @@ export const KPICardsRow: React.FC = () => {
             />
           </div>
           <span className="text-xs font-bold text-slate-700">{tankPercentage}%</span>
+        </div>
+        <div className="mt-1.5 text-xs text-slate-400 font-medium flex items-center gap-1">
+          <TrendingUp className="w-3 h-3" /> Simulated estimate
         </div>
       </div>
 

@@ -1,13 +1,35 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MapPin, Calendar, ChevronDown, Menu } from 'lucide-react';
+import { MapPin, Calendar, ChevronDown, Menu, RefreshCw, Wifi, WifiOff, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 interface HeaderProps {
   setMobileOpen: (open: boolean) => void;
 }
 
+function formatFetchTime(date: Date | null): string {
+  if (!date) return '';
+  return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatTodayDate(): string {
+  return new Date().toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 export const Header: React.FC<HeaderProps> = ({ setMobileOpen }) => {
-  const { selectedLocation, setSelectedLocationId, locationsList } = useApp();
+  const {
+    selectedLocation,
+    setSelectedLocationId,
+    locationsList,
+    weatherStatus,
+    weatherError,
+    weatherIsStale,
+    weatherLastFetched,
+    refreshWeather,
+  } = useApp();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -21,6 +43,9 @@ export const Header: React.FC<HeaderProps> = ({ setMobileOpen }) => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const isLoading = weatherStatus === 'loading';
+  const hasError  = weatherStatus === 'error';
 
   return (
     <header className="w-full flex flex-col md:flex-row md:items-center md:justify-between gap-4 py-4 px-4 sm:px-8 bg-transparent">
@@ -45,7 +70,56 @@ export const Header: React.FC<HeaderProps> = ({ setMobileOpen }) => {
       </div>
 
       {/* Selectors on Right */}
-      <div className="flex items-center gap-3 self-start md:self-auto">
+      <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+
+        {/* Weather status indicator */}
+        <div className="flex items-center gap-1.5">
+          {hasError && (
+            <span
+              title={weatherError ?? 'Weather data unavailable'}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Stale data
+            </span>
+          )}
+
+          {weatherIsStale && !hasError && (
+            <span className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold">
+              <WifiOff className="w-3.5 h-3.5" />
+              Cached
+            </span>
+          )}
+
+          {weatherStatus === 'success' && !weatherIsStale && (
+            <span
+              title={`Live weather data — last fetched at ${formatFetchTime(weatherLastFetched)}`}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold"
+            >
+              <Wifi className="w-3.5 h-3.5" />
+              Live
+            </span>
+          )}
+
+          {/* Last fetched time */}
+          {weatherLastFetched && (
+            <span className="text-[10px] text-slate-400 font-medium hidden sm:block">
+              Updated {formatFetchTime(weatherLastFetched)}
+            </span>
+          )}
+
+          {/* Manual refresh button */}
+          <button
+            onClick={refreshWeather}
+            disabled={isLoading}
+            title="Refresh weather data"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-blue-400 text-xs font-semibold transition-all disabled:opacity-50 shadow-sm"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-blue-500' : ''}`} />
+            {isLoading ? 'Fetching…' : 'Refresh'}
+          </button>
+        </div>
+
         {/* Location Dropdown */}
         <div className="relative" ref={dropdownRef}>
           <button
@@ -90,10 +164,10 @@ export const Header: React.FC<HeaderProps> = ({ setMobileOpen }) => {
           )}
         </div>
 
-        {/* Date Selector Badge */}
+        {/* Live Date Badge */}
         <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200 shadow-sm text-slate-800 text-sm font-semibold">
           <Calendar className="w-4 h-4 text-blue-600" />
-          <span>12 Nov 2024</span>
+          <span>{formatTodayDate()}</span>
         </div>
       </div>
     </header>

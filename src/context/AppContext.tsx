@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useMemo } from 'react';
 import type { LocationData, SystemSettings, ViewMode } from '../types';
 import { LOCATIONS_DATA, DEFAULT_SETTINGS } from '../data/mockData';
+import { useWeatherData, type UseWeatherDataResult } from '../hooks/useWeatherData';
+import type { WeatherApiResult } from '../services/weatherService';
 
 interface AppContextType {
   activeView: ViewMode;
@@ -38,6 +40,21 @@ interface AppContextType {
   // Toast notifications
   toastMessage: string | null;
   showToast: (msg: string) => void;
+
+  // ── Live weather data ──────────────────────────────────────────────────
+  weatherData: WeatherApiResult | null;
+  weatherStatus: UseWeatherDataResult['status'];
+  weatherError: string | null;
+  weatherIsStale: boolean;
+  weatherLastFetched: Date | null;
+  refreshWeather: () => void;
+
+  // Resolved values (live data when available, fallback to sample values)
+  liveRainfallToday: number;      // mm
+  liveTotal7DayRainfall: number;  // mm
+
+  // Annual rainfall total for analytics (mm) — from historical API or mock
+  annualRainfallMm: number;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -58,11 +75,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [tankCapacity, setTankCapacity] = useState<number>(settings.tankCapacity);
   const [runoffCoefficient, setRunoffCoefficient] = useState<number>(settings.runoffCoefficient);
   const [predictedRainfallForCalc, setPredictedRainfallForCalc] = useState<number>(selectedLocation.predictedRainfallForCalc || 80);
-  const [currentStorage, setCurrentStorage] = useState<number>(selectedLocation.currentStorage || 3250);
+  const [currentStorage, setCurrentStorage] = useState<number>(() => {
+    // Persist tank level across page refreshes
+    const saved = localStorage.getItem(`rwh_tank_${selectedLocationId}`);
+    return saved ? Number(saved) : (selectedLocation.currentStorage || 3250);
+  });
   const [dailyWaterRequirement, setDailyWaterRequirement] = useState<number>(selectedLocation.dailyWaterRequirement || 600);
   
   const [forecastTab, setForecastTab] = useState<string>('Next 7 Days');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Weather coords derived from selected location
+  const weatherCoords = useMemo(() => ({
+    lat: selectedLocation.lat,
+    lon: selectedLocation.lon,
+    timezone: selectedLocation.timezone,
+  }), [selectedLocation.lat, selectedLocation.lon, selectedLocation.timezone]);
+
+  // Live weather data hook
+  const {
+    weatherData,
+    status: weatherStatus,
+    errorMessage: weatherError,
+    isStale: weatherIsStale,
+    lastFetched: weatherLastFetched,
+    refresh: refreshWeather,
+  } = useWeatherData(selectedLocationId, weatherCoords);
 
   // Sync when location changes
   const setSelectedLocationId = (id: string) => {
@@ -70,7 +108,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const loc = LOCATIONS_DATA.find(l => l.id === id);
     if (loc) {
       setPredictedRainfallForCalc(loc.predictedRainfallForCalc);
-      setCurrentStorage(loc.currentStorage);
+      // Load persisted tank level for new location
+      const saved = localStorage.getItem(`rwh_tank_${id}`);
+      setCurrentStorage(saved ? Number(saved) : loc.currentStorage);
       setDailyWaterRequirement(loc.dailyWaterRequirement);
       showToast(`Location changed to ${loc.name}, ${loc.state}`);
     }
@@ -88,12 +128,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('Settings saved successfully!');
   };
 
+  // Persist tank level on change
+  const setCurrentStoragePersisted = (val: number) => {
+    setCurrentStorage(val);
+    localStorage.setItem(`rwh_tank_${selectedLocationId}`, String(val));
+  };
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(null);
     }, 3500);
   };
+
+  // ── Resolved live vs. fallback values ────────────────────────────────
+
+  // Rainfall today: use live daily[0] value, else fallback
+  const liveRainfallToday = weatherData?.current.precipitationToday
+    ?? selectedLocation.rainfallToday;
+
+  // 7-day total from live data, else fallback
+  const liveTotal7DayRainfall = weatherData?.total7DayRainfall
+    ?? selectedLocation.predicted7Days;
+
+  // Annual rainfall for analytics (sum of last full year, or most recent historical, or fallback)
+  const annualRainfallMm = useMemo(() => {
+    if (weatherData?.annualData && weatherData.annualData.length > 0) {
+      // Use the most recent non-predicted year
+      const hist = weatherData.annualData.filter(a => !a.isPredicted);
+      if (hist.length > 0) return hist[hist.length - 1].rainfall;
+    }
+    // Fallback: last non-predicted entry in mock data
+    const mockHist = selectedLocation.annualData.filter(a => !a.isPredicted);
+    return mockHist.length > 0 ? mockHist[mockHist.length - 1].rainfall : 810;
+  }, [weatherData, selectedLocation]);
 
   // Derived formulas
   const expectedCollection = Math.round(predictedRainfallForCalc * roofArea * runoffCoefficient);
@@ -123,7 +191,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         predictedRainfallForCalc,
         setPredictedRainfallForCalc,
         currentStorage,
-        setCurrentStorage,
+        setCurrentStorage: setCurrentStoragePersisted,
         dailyWaterRequirement,
         setDailyWaterRequirement,
         expectedCollection,
@@ -134,6 +202,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setForecastTab,
         toastMessage,
         showToast,
+        // Live weather
+        weatherData,
+        weatherStatus,
+        weatherError,
+        weatherIsStale,
+        weatherLastFetched,
+        refreshWeather,
+        // Resolved values
+        liveRainfallToday,
+        liveTotal7DayRainfall,
+        annualRainfallMm,
       }}
     >
       {children}

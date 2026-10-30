@@ -11,6 +11,13 @@ export interface LocationData {
   id: string;
   name: string;
   state: string;
+
+  // Geographic coordinates for live API calls
+  lat: number;
+  lon: number;
+  timezone: string;
+
+  // Fallback / initial sample values (replaced by live data when available)
   rainfallToday: number; // mm
   predicted7Days: number; // mm
   trendPercent: number;

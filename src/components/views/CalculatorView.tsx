@@ -22,7 +22,9 @@ export const CalculatorView: React.FC = () => {
     setPredictedRainfallForCalc: setGlobalRain,
     currentStorage,
     showToast,
-    setActiveView
+    setActiveView,
+    annualRainfallMm,
+    weatherData,
   } = useApp();
 
   const ROOF_TYPES = [
@@ -57,7 +59,7 @@ export const CalculatorView: React.FC = () => {
   const remainingCap = Math.max(0, localTankCap - totalWaterInTank);
   const overflowQty = Math.max(0, totalWaterInTank - localTankCap);
 
-  const annualRainfallEst = 810;
+  const annualRainfallEst = annualRainfallMm; // Live from Open-Meteo historical data (or fallback)
   const annualCollectionEst = Math.round(annualRainfallEst * localRoofArea * localRunoff);
 
   const dailyRequirement = residents * usagePerPerson;
@@ -284,7 +286,10 @@ export const CalculatorView: React.FC = () => {
               )}
 
               <div className="flex justify-between items-center p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-xs font-semibold text-slate-600">Est. Annual Collection</span>
+                <span className="text-xs font-semibold text-slate-600">
+                  Est. Annual Collection
+                  {weatherData && <span className="text-blue-500 ml-1 text-[10px]">(live {annualRainfallEst} mm/yr)</span>}
+                </span>
                 <span className="text-sm font-extrabold text-blue-600">{annualCollectionEst.toLocaleString()} L/yr</span>
               </div>
 
